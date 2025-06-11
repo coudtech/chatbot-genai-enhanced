@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Local Chatbot</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="dropdown">
+    <button class="dropbtn">☰Menu</button>
+    <div class="dropdown-content">
+        <a href="/upload">Data Analysis</a>
+    </div>
+</div>
+
+<h2>GenAI Ticket Assistant</h2>
+
+<div id="bot-typing" style="display: none;">Bot is typing...</div>
+<div id="chat-box"></div>
+
+<div id="input-area">
+    <input type="text" id="user-input" placeholder="Type your message..." />
+    <button onclick="sendMessage()">Ask</button>
+</div>
+
+<script>
+    let context = {
+       stage: 'init',   // stages: 'init', 'search', 'confirm', 'awaiting_index', 'follow_up'
+       searchResults: [],
+       noCount: 0,
+       currentIncident: null,   // store selected incident info for follow-ups
+    };
+
+    const introTemplates = [
+        "Here are a few incidents that closely match your issue:",
+        "Based on your description, these incidents may be relevant:",
+        "We have identified similar cases that may help you. Please review:",
+        "These incidents may provide further context to your issue:",
+        "The following cases appear to align with your situation:",
+        "Here’s a list of incidents that could be helpful for your reference:",
+        "These incidents might offer additional insights into your problem:",
+        "We’ve found incidents that closely resemble your case. Take a look:",
+        "These incidents are relevant to the issue you're facing. Please check them out:",
+        "Please review these incidents to better understand the issue:"
+    ];
+
+    const rcaTemplates = [
+        "Thanks! Here's the detailed RCA and summary:",
+        "Below is the root cause and resolution summary for the selected case:",
+        "Here’s what happened and how it was resolved:",
+        "Please find the RCA along with the resolution details below:",
+        "Here's the root cause and the actions taken to resolve the issue:",
+        "The issue was caused by the following factors and has been addressed as follows:",
+        "Here is a breakdown of the root cause and how it was resolved:",
+        "Below is the analysis of what happened and the resolution process:",
+        "We’ve identified the root cause and taken necessary steps to resolve it. Here's the summary:",
+        "The root cause and resolution details for your issue are outlined below:"
+    ];
+
+    function getRandomTemplate(templates) {
+        return templates[Math.floor(Math.random() * templates.length)];
+    }
+	
+	function onIncidentSelected(index) {
+	  fetch('/incident_details', {
+		method: 'POST',
+		headers: {'Content-Type': 'application/json'},
+		body: JSON.stringify({ index: index })
+	  })
+	  .then(res => res.json())
+	  .then(data => {
+		if (data.error) {
+		  appendMessage("Error loading incident details: " + data.error);
+		  return;
+		}
+
+		// 🔍 Normalize nested fields before storing
+		const flattenedData = {};
+		for (let key in data) {
+		  if (typeof data[key] === 'object' && data[key] !== null && 'value' in data[key]) {
+			flattenedData[key] = data[key].value; // Use the 'value' field if it's an object
+		  } else {
+			flattenedData[key] = data[key]; // Use the value directly
+		  }
+		}
+
+		context.currentIncident = flattenedData;
+
+		appendMessage(`Loaded full details for incident ${flattenedData.INC}`);
+	  })
+	  .catch(err => {
+		appendMessage("Failed to load incident details");
+		console.error("onIncidentSelected error:", err);
+	  });
+	}
+
+
+    function appendMessage(content, sender = 'bot', skipTypewriter = false) {
+        const chatBox = document.getElementById("chat-box");
+        const msg = document.createElement("div");
+        msg.className = sender === 'user' ? 'user-msg' : 'bot-msg';
+
+        if (sender === 'user' || skipTypewriter) {
+            msg.innerHTML = content;
+            chatBox.appendChild(msg);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            return;
+        }
+
+        if (typeof content === 'object' && content.text && content.html) {
+            let i = 0;
+            const speed = 30;
+            msg.innerHTML = '';
+            chatBox.appendChild(msg);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            function type() {
+                if (i < content.text.length) {
+                    msg.innerHTML += content.text.charAt(i);
+                    i++;
+                    setTimeout(type, speed);
+                } else {
+                    const htmlMsg = document.createElement("div");
+                    htmlMsg.className = 'bot-msg';
+                    htmlMsg.innerHTML = content.html;
+                    chatBox.appendChild(htmlMsg);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            }
+            type();
+        } else {
+            let i = 0;
+            const speed = 30;
+            msg.innerHTML = '';
+            chatBox.appendChild(msg);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            function type() {
+                if (i < content.length) {
+                    msg.innerHTML += content.charAt(i);
+                    i++;
+                    setTimeout(type, speed);
+                } else {
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            }
+            type();
+        }
+    }
+
+    async function sendMessage() {
+        const inputField = document.getElementById("user-input");
+        const input = inputField.value.trim();
+        if (!input) return;
+
+        appendMessage(input, 'user');
+        inputField.value = '';
+        document.getElementById("bot-typing").style.display = 'block';
+
+        setTimeout(async () => {
+            document.getElementById("bot-typing").style.display = 'none';
+            const lowerInput = input.toLowerCase();
+
+            if (lowerInput === 'hi' || lowerInput === 'hello') {
+                appendMessage("Hi, how may I assist you?");
+                context.stage = 'search';
+                context.noCount = 0;
+                context.currentIncident = null;
+                return;
+            }
+
+            try {
+                switch(context.stage) {
+                    case 'init':
+                        appendMessage("Please say hi or hello to start.");
+                        break;
+                   
+
+                    case 'search':
+                        const response = await fetch('/search', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query: input })
+                        });
+
+                        if (!response.ok) throw new Error(`Network response was not ok: ${response.status}`);
+
+                        const results = await response.json();
+
+                        if (!results || results.length === 0) {
+                            appendMessage({
+                                text: "Sorry, I can't help with your query.",
+                                html: "<br>To start a new conversation, please say hi/hello. Thank you."
+                            });
+                            context.stage = 'init';
+                            return;
+                        }
+
+                        context.searchResults = results;
+
+                        let table = "<table><tr><th>No</th><th>INC</th><th>Date</th><th>Description</th></tr>";
+                        for (const row of results) {
+                            table += `<tr><td>${row.Index}</td><td>${row.INC}</td><td class="nowrap">${row.Date}</td><td>${row.Description}</td></tr>`;
+                        }
+                        table += "</table>";
+
+                        appendMessage({ text: getRandomTemplate(introTemplates), html: table });
+
+                        setTimeout(() => {
+                            appendMessage("Is it matching with your issue? (yes/no)");
+                            context.stage = 'confirm';
+                        }, results.length * 50 + 3500);
+
+                        break;
+
+                    case 'confirm':
+					    if (
+							lowerInput.includes('another incident') ||
+							lowerInput.includes('different incident') ||
+							lowerInput.includes('another issue') ||
+							lowerInput.includes('different issue') ||
+							lowerInput.includes('another ticket') ||
+							lowerInput.includes('different ticket') ||
+							lowerInput.includes('new issue') ||
+							lowerInput.includes('new ticket') ||
+							lowerInput.includes('other one') ||
+							lowerInput.includes('see more') ||
+							lowerInput.includes('new incident') ||
+							lowerInput.includes('another challenge') ||
+							lowerInput.includes('another problem') ||
+							lowerInput.includes('another thing') ||
+							lowerInput.includes('some other problem') ||
+							lowerInput.includes('some other issue') ||
+							lowerInput.includes('different problem') ||							
+							lowerInput.includes('go back') ||
+							lowerInput.includes('new')
+							){
+							appendMessage("Great! Tell me about your issue, happy to help you.");
+							context.stage = 'search';
+							context.searchResults = [];
+							context.noCount = 0;
+							context.currentIncident = null;
+							return;
+						}
+
+                        if (lowerInput === 'yes') {
+                            appendMessage("Please enter the number (No) to get RCA and Action.");
+							
+                            context.stage = 'awaiting_index';
+                        } else if (lowerInput === 'no') {
+                            context.noCount++;
+                            if (context.noCount >= 2) {
+                                appendMessage("Sorry, I don't have enough data to help you, please contact domain expert, or say 'new' to start over");
+                                context.stage = 'search';
+                                context.searchResults = [];
+                                context.noCount = 0;
+                            } else {
+                                appendMessage("Please elaborate more to assist you better.");
+                                context.stage = 'search';
+                            }
+                        } else {
+                            appendMessage("Please reply with yes or no.");
+                        }
+                        break;
+						
+						
+					case 'awaiting_index':
+					    if (lowerInput === 'new') {
+							appendMessage("Great! Tell me about your issue, happy to help you.");
+							context.stage = 'search';
+							context.searchResults = [];
+							context.noCount = 0;
+							context.currentIncident = null;
+							return;
+						}
+					    if (
+								lowerInput.includes('another incident') ||
+								lowerInput.includes('different incident') ||
+								lowerInput.includes('another issue') ||
+								lowerInput.includes('different issue') ||
+								lowerInput.includes('another ticket') ||
+								lowerInput.includes('different ticket') ||
+								lowerInput.includes('new issue') ||
+								lowerInput.includes('new ticket') ||
+								lowerInput.includes('other one') ||
+								lowerInput.includes('see more') ||
+								lowerInput.includes('new incident') ||
+								lowerInput.includes('another challenge') ||
+								lowerInput.includes('another problem') ||
+								lowerInput.includes('another thing') ||
+								lowerInput.includes('some other problem') ||
+								lowerInput.includes('some other issue') ||
+								lowerInput.includes('different problem') ||							
+								lowerInput.includes('go back')
+							) {
+								appendMessage("Great! Tell me about your issue, happy to help you.");
+								context.stage = 'search';  // or 'awaiting_issue' if that’s the correct one
+								context.searchResults = [];
+								context.noCount = 0;
+								context.currentIncident = null;
+								return;
+						}
+						// Try to extract a number or word like 'first', 'second', etc.
+						const ordinals = {
+							'first': 1,
+							'second': 2,
+							'third': 3,
+							'fourth': 4,
+							'fifth': 5,
+							'sixth': 6,
+							'seventh': 7,
+							'eighth': 8,
+							'ninth': 9,
+							'tenth': 10
+						};
+
+						let selected = parseInt(input.match(/\d+/)?.[0]);
+						if (!selected) {
+							const match = Object.keys(ordinals).find(key => lowerInput.includes(key));
+							if (match) {
+								selected = ordinals[match];
+							}
+						}
+
+						if (isNaN(selected) || selected < 1 || selected > context.searchResults.length) {
+							appendMessage("Invalid selection. Please enter a valid number from the list.");
+							return;
+						}
+
+						const trueIndex = context.searchResults[selected - 1].TrueIndex;
+						const rcaResponse = await fetch('/get_rca', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ index: trueIndex })
+						});
+
+						if (!rcaResponse.ok) throw new Error(`Network response was not ok: ${rcaResponse.status}`);
+
+						const data = await rcaResponse.json();
+
+						appendMessage({
+							text: getRandomTemplate(rcaTemplates), html: `
+								<b>INC:</b> ${data.INC}<br>
+								<b>Priority:</b> ${data["INC Priority"]}<br>
+								<b>Action:</b> ${data.Action}<br>
+								<b>RCA:</b> ${data.RCA}<br>
+								<b>Resolved By:</b> ${data["Resolved By"]}
+							`
+						});
+
+						context.currentIncident = data;
+
+						setTimeout(() => {
+							appendMessage("Do you need more details or say 'new' to start a new conversation.");
+						}, 3500);
+
+						context.stage = 'follow_up';
+						break;
+						
+					case 'follow_up': {
+						const lowerInput = input.toLowerCase();
+
+						// If user wants to pick another incident from previous search
+						if (
+							lowerInput.includes('another incident') ||
+							lowerInput.includes('different incident') ||
+							lowerInput.includes('another issue') ||
+							lowerInput.includes('different issue') ||
+							lowerInput.includes('another ticket') ||
+							lowerInput.includes('different ticket') ||
+							lowerInput.includes('new issue') ||
+							lowerInput.includes('new ticket') ||
+							lowerInput.includes('other one') ||
+							lowerInput.includes('see more') ||
+							lowerInput.includes('new incident') ||
+							lowerInput.includes('another challenge') ||
+							lowerInput.includes('another problem') ||
+							lowerInput.includes('another thing') ||
+							lowerInput.includes('some other problem') ||
+							lowerInput.includes('some other issue') ||
+							lowerInput.includes('different problem') ||
+							lowerInput.includes('first') ||
+							lowerInput.includes('second') ||
+							lowerInput.includes('third') ||
+							lowerInput.includes('fourth') ||
+							lowerInput.includes('fifth') ||
+							lowerInput.includes('second one') ||
+							lowerInput.includes('go back')
+						) {
+							if (context.searchResults && context.searchResults.length > 0) {
+								appendMessage("Sure, please enter the number (No) of the incident from the list or say 'new' to start a new conversation.");
+								context.stage = 'awaiting_index';
+							} else {
+								appendMessage("Sorry, there are no earlier results to choose from. Please start a new search.");
+							}
+							return;
+						}
+
+						// Start new conversation
+						if (lowerInput === 'new') {
+							appendMessage("Great! Tell me about your issue, happy to help you.");
+							context.stage = 'search';
+							context.searchResults = [];
+							context.noCount = 0;
+							context.currentIncident = null;
+							return;
+						}
+
+						// Respond with details from currentIncident if available
+						if (context.currentIncident) {
+						    // ✅ Reapply enrichment to ensure structure is consistent
+							//onIncidentSelected(context.currentIncident);
+							const incident = context.currentIncident;
+
+							if (lowerInput.includes('priority')) {
+								appendMessage(`The priority of incident ${incident.INC} is ${incident["INC Priority"]}.`);
+							} else if (lowerInput.includes('action')) {
+								appendMessage(`The action taken was: ${incident.Action}`);
+							} else if (lowerInput.includes('rca')) {
+								appendMessage(`Root cause analysis: ${incident.RCA}`);
+							} else if (lowerInput.includes('resolved by') || lowerInput.includes('who resolved')) {
+								const resolvedBy = incident["Resolved By"];
+								if (resolvedBy) {
+									appendMessage(`This incident was resolved by: ${resolvedBy}`);
+								} else {
+									appendMessage("Sorry, the resolver information is not available in the records.");
+								}
+							} else if (
+								lowerInput.includes('when it got resolved') || 
+								lowerInput.includes('got resolved') || 
+								lowerInput.includes('resolved') || 
+								lowerInput.includes('resolved date') || 
+								lowerInput.includes('resolution date') || 
+								lowerInput.includes('when resolved') ||
+								lowerInput.includes('end time')
+							) {
+								const endTime = incident["EndTime"] || incident["End Time"];
+								if (endTime) {
+									appendMessage(`The incident was resolved on: ${endTime}`);
+								} else {
+									appendMessage("Sorry, the resolved date is not available in the records.");
+								}
+							} else if (lowerInput.includes('month')) {
+								appendMessage(`The incident occurred in the month: ${incident.Month}`);
+							} else if (lowerInput.includes('date')) {
+								appendMessage(`The incident date is: ${incident.Date}`);
+							} else if (lowerInput.includes('area')) {
+								appendMessage(`Area affected: ${incident.Area}`);
+							} else if (lowerInput.includes('app')) {
+								appendMessage(`Application involved: ${incident.App}`);
+							} else if (lowerInput.includes('description')) {
+								appendMessage(`Description: ${incident.Description}`);
+							} else if (lowerInput.includes('details')) {
+								appendMessage(`INC/Issue Details: ${incident["INC/Issue Details"]}`);
+							} else if (lowerInput.includes('business impact')) {
+								appendMessage(`Business Impact: ${incident["Business Impact"]}`);
+							} else if (lowerInput.includes('caused by')) {
+								appendMessage(`Caused By: ${incident["Caused By"]}`);
+							} else if (lowerInput.includes('next steps')) {
+								appendMessage(`Next Steps / Actions: ${incident["Next Steps / Actions"]}`);
+							} else if (lowerInput.includes('start time')) {
+								appendMessage(`Start Time: ${incident["StartTime"]}`);
+							} else if (lowerInput.includes('long running')) {
+								appendMessage(`Long Running: ${incident["Long Running"]}`);
+							} else if (lowerInput.includes('comments')) {
+								appendMessage(`Comments: ${incident.Comments}`);
+							} else if (lowerInput.includes('identified by')) {
+								appendMessage(`Identified by: ${incident["Identified by"]}`);
+							} else {
+								appendMessage("Sorry, I don't have details for that right now. Say 'new' to start over or ask about priority, action, RCA, resolved by, dates, etc.");
+							}
+						} else {
+							appendMessage("Sorry, I don't have details for follow-up questions right now. Say 'new' to start over.");
+							context.stage = 'init';
+						}
+						}
+						break;
+					
+                    default:
+                        appendMessage("I didn't understand. To start a new conversation, say hi/hello.");
+                        context.stage = 'init';
+                }
+            } catch (err) {
+                console.error("Error during fetch or processing:", err);
+                appendMessage("Sorry, there was an error contacting the server. Please try again later.");
+                context.stage = 'init';
+                context.searchResults = [];
+                context.noCount = 0;
+                context.currentIncident = null;
+            }
+        }, 1000);
+    }
+	
+    // Attach event listener only after DOM is fully loaded
+    document.addEventListener("DOMContentLoaded", function() {
+        const userInput = document.getElementById("user-input");
+        if (userInput) {
+            userInput.addEventListener("keypress", function(event) {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    sendMessage();
+                }
+            });
+        }
+    });
+</script>
+</body>
+</html>

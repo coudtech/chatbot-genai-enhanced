@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Upload Data for Analysis</title>
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+<style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        h2 {
+            color: #333;
+        }
+        #upload-form {
+            margin-top: 20px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            background-color: #f9f9f9;
+            max-width: 500px;
+        }
+        input[type="file"] {
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 3px 1px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #result-area {
+            margin-top: 30px;
+        }
+        a.back-button {
+            display: inline-block;
+            margin-top: 20px;
+            text-decoration: none;
+            background-color: #007BFF;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+        }
+        a.back-button:hover {
+            background-color: #0056b3;
+        }
+</style>
+</head>
+<body>
+<div class="upload-container">
+<h2>Upload CSV for Analysis</h2>
+ 
+    <div id="upload-form">
+<form id="csv-upload-form" enctype="multipart/form-data">
+<input type="file" name="file" accept=".csv" required><br><br>
+<button type="submit">Analyze</button>
+</form>
+</div>
+ 
+    <div id="result-area"></div>
+<div id="download-link" style="margin-top: 20px;"></div>
+ 
+ 
+    <a href="/" class="back-button">← Back to Chat</a>
+</div>
+ 
+    <script>
+        const form = document.getElementById("csv-upload-form");
+        const resultArea = document.getElementById("result-area");
+ 
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const formData = new FormData(form);
+ 
+            const response = await fetch("/analyze_upload", {
+                method: "POST",
+                body: formData
+            });
+ 
+            const resultText = await response.text();
+            resultArea.innerHTML = resultText;
+			fetch('/analyze_upload', {
+			method: 'POST',
+			body: formData
+		})
+		.then(response => response.json())
+		.then(data => {
+			if (data.error) {
+				document.getElementById("result-area").innerHTML = `<div class="bot-msg">${data.error}</div>`;
+				return;
+			}
+ 
+			document.getElementById("result-area").innerHTML = data.chart_html;
+			document.getElementById("download-link").innerHTML = `
+<a href="${data.download_link}" class="download-button" download>📥 Download App Counts CSV</a>
+			`;
+		});
+        });
+</script>
+</body>
+</html>
