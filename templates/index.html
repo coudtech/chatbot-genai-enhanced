@@ -199,7 +199,7 @@
 
                         context.searchResults = results;
 
-                        let table = "<table><tr><th>No</th><th>Date</th><th>INC</th><th>INC Priority</th><th>Date</th><th>Description</th></tr>";
+                        let table = "<table><tr><th>No</th><th>Date</th><th>INC</th><th>INC Priority</th><th>Description</th></tr>";
                         for (const row of results) {
                             table += `<tr><td>${row.Index}</td><td class="nowrap">${row.Date}</td><td>${row.INC}</td><td>${row["INC Priority"]}</td><td>${row.Description}</td></tr>`;
                         }
