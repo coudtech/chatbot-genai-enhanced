@@ -102,8 +102,9 @@ def search():
         results.append({
             'Index': i,
             'TrueIndex': int(row['Index']),
-            'INC': row.get('INC', ''),
             'Date': formatted_date,
+            'INC': row.get('INC', ''),
+            'INC Priority': row.get('INC Priority', ''),
             'Description': row.get('Description', ''),
             'Resolved By': row.get('Resolved By', ''),
             'Action': row.get('Action', 'N/A'),
