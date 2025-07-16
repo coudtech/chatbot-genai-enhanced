@@ -5,7 +5,7 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
 </head>
-<body> 
+<body>
 
 <div class="dropdown">
     <button class="dropbtn">☰Menu</button>
@@ -187,32 +187,65 @@
                         if (!response.ok) throw new Error(`Network response was not ok: ${response.status}`);
 
                         const results = await response.json();
+						console.log("Results:", results);
 
-                        if (!results || results.length === 0) {
-                            appendMessage({
-                                text: "Sorry, I can't help with your query.",
-                                html: "<br>To start a new conversation, please say hi/hello. Thank you."
-                            });
-                            context.stage = 'init';
-                            return;
-                        }
+						// Check if results is an array (search results) or object (analysis summary)
+						if (Array.isArray(results)) {
+							if (results.length === 0) {
+								appendMessage({
+									text: "Sorry, I can't help with your query.",
+									html: "<br>To start a new conversation, please say hi/hello. Thank you."
+								});
+								context.stage = 'init';
+								return;
+							}
 
-                        context.searchResults = results;
+							context.searchResults = results;
 
-                        let table = "<table><tr><th>No</th><th>Date</th><th>INC</th><th>INC Priority</th><th>Description</th></tr>";
-                        for (const row of results) {
-                            table += `<tr><td>${row.Index}</td><td class="nowrap">${row.Date}</td><td>${row.INC}</td><td>${row["INC Priority"]}</td><td>${row.Description}</td></tr>`;
-                        }
-                        table += "</table>";
+							let table = "<table><tr><th>No</th><th>Date</th><th>INC</th><th>INC Priority</th><th>Description</th></tr>";
+							for (const row of results) {
+								table += `<tr><td>${row.Index}</td><td class="nowrap">${row.Date}</td><td>${row.INC}</td><td>${row["INC Priority"]}</td><td>${row.Description}</td></tr>`;
+							}
+							table += "</table>";
+							appendMessage({ text: getRandomTemplate(introTemplates), html: table });
 
-                        appendMessage({ text: getRandomTemplate(introTemplates), html: table });
+							setTimeout(() => {
+								appendMessage("Is it matching with your issue? (yes/no)");
+								context.stage = 'confirm';
+							}, results.length * 50 + 3500);
 
-                        setTimeout(() => {
-                            appendMessage("Is it matching with your issue? (yes/no)");
-                            context.stage = 'confirm';
-                        }, results.length * 50 + 3500);
+						} else if (results.analysis) {
+							// Handle analysis JSON response
+							let message = "";
 
-                        break;
+							switch(results.query_type) {
+								case 'count_today':
+									message = `Issues reported today (${results.date}): ${results.total_issues}`;
+									break;
+								case 'count_yesterday':
+									message = `Issues reported yesterday (${results.date}): ${results.total_issues}`;
+									break;
+								case 'total_issues':
+									message = `Total issues: ${results.total_issues}`;
+									break;
+								default:
+									message = "Sorry, couldn't understand the analysis result.";
+							}
+
+							appendMessage(message);
+							<!-- context.stage = 'init';  // or wherever you want the flow to continue -->
+
+						} else {
+							// Unexpected response format
+							appendMessage({
+								text: "Sorry, I can't help with your query.",
+								html: "<br>To start a new conversation, please say hi/hello. Thank you."
+							});
+							context.stage = 'init';
+						}
+
+						break;
+
 
                     case 'confirm':
 					    if (
