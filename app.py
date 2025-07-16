@@ -73,38 +73,98 @@ def index():
         # })
 
     # return jsonify(results)
-    
-@app.route('/search', methods=['POST'])
+ @app.route('/search', methods=['POST'])
 def search():
     global last_context_row
-    query = request.json.get('query')
+    query = request.json.get('query').lower()
 
+    # --- Step 1: Intent Detection ---
+    def is_analysis_query(q):
+        keywords = ['total', 'count', 'how many', 'number of', 'yesterday', 'today', 'last week']
+        return any(k in q for k in keywords)
+
+    # --- Step 2: Handle Analysis Queries ---
+    if is_analysis_query(query):
+        df = model.df.copy()
+        #df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+        df['Date'] = pd.to_datetime(df['Date'], errors='coerce').dt.normalize()
+        df = df.dropna(subset=['Date'])
+
+        today = pd.Timestamp.today().normalize()
+        yesterday = today - pd.Timedelta(days=1)
+
+        query = query.lower()  # Normalize the case for easier matching
+
+        # YESTERDAY queries
+        if 'yesterday' in query and (
+            'count' in query or
+            'total' in query or
+            'issues' in query or
+            'resolved' in query or
+            'occurred' in query or
+            'number' in query
+        ):
+            count = df[df['Date'] == yesterday].shape[0]
+            return jsonify({
+                'analysis': True,
+                'query_type': 'count_yesterday',
+                'date': str(yesterday.date()),
+                'total_issues': count
+            })
+
+        elif 'today' in query and (
+        'count' in query or
+        'total' in query or
+        'issues' in query or
+        'resolved' in query or
+        'occurred' in query or
+        'number' in query
+        ):
+            count = df[df['Date'] == today].shape[0]
+            return jsonify({
+                'analysis': True,
+                'query_type': 'count_today',
+                'date': str(today.date()),
+                'total_issues': count
+            })
+
+        elif (
+            'total' in query or
+            'count' in query or
+            'all' in query or
+            'overall' in query or
+            ('issues' in query and ('how many' in query or 'number' in query))
+        ):
+            total = df.shape[0]
+            return jsonify({
+                'analysis': True,
+                'query_type': 'total_issues',
+                'total_issues': total
+            })
+
+
+    # --- Step 3: Proceed with Normal RCA Flow ---
     query_vec = model.vectorizer.transform([query])
     sim_scores = cosine_similarity(query_vec, model.tfidf_matrix).flatten()
 
     top_indices = sim_scores.argsort()[-5:][::-1]
     top_scores = sim_scores[top_indices]
 
-    # Extract top rows into DataFrame for sorting
     top_rows = model.df.iloc[top_indices].copy()
     top_rows['similarity'] = top_scores
-
-    # Parse Date and clean
     top_rows['Date'] = pd.to_datetime(top_rows['Date'], errors='coerce')
-    top_rows = top_rows.dropna(subset=['Date'])  # optional
+    top_rows = top_rows.dropna(subset=['Date'])
     top_rows = top_rows.sort_values(by='Date', ascending=True)
 
     results = []
     for i, (_, row) in enumerate(top_rows.iterrows(), start=1):
         last_context_row = row.to_dict()
-        formatted_date = row['Date'].strftime('%d-%m-%Y')
-
+        formatted_date = row['Date'].strftime('%Y-%m-%d')
         results.append({
             'Index': i,
             'TrueIndex': int(row['Index']),
-            'Date': formatted_date,
             'INC': row.get('INC', ''),
-            'INC Priority': row.get('INC Priority', ''),
+            'Date': formatted_date,
             'Description': row.get('Description', ''),
             'Resolved By': row.get('Resolved By', ''),
             'Action': row.get('Action', 'N/A'),
@@ -121,6 +181,54 @@ def search():
         })
 
     return jsonify(results)
+   
+# @app.route('/search', methods=['POST'])
+# def search():
+    # global last_context_row
+    # query = request.json.get('query')
+
+    # query_vec = model.vectorizer.transform([query])
+    # sim_scores = cosine_similarity(query_vec, model.tfidf_matrix).flatten()
+
+    # top_indices = sim_scores.argsort()[-5:][::-1]
+    # top_scores = sim_scores[top_indices]
+
+    #Extract top rows into DataFrame for sorting
+    # top_rows = model.df.iloc[top_indices].copy()
+    # top_rows['similarity'] = top_scores
+
+    # Parse Date and clean
+    # top_rows['Date'] = pd.to_datetime(top_rows['Date'], errors='coerce')
+    # top_rows = top_rows.dropna(subset=['Date'])  # optional
+    # top_rows = top_rows.sort_values(by='Date', ascending=True)
+
+    # results = []
+    # for i, (_, row) in enumerate(top_rows.iterrows(), start=1):
+        # last_context_row = row.to_dict()
+        # formatted_date = row['Date'].strftime('%d-%m-%Y')
+
+        # results.append({
+            # 'Index': i,
+            # 'TrueIndex': int(row['Index']),
+            # 'Date': formatted_date,
+            # 'INC': row.get('INC', ''),
+            # 'INC Priority': row.get('INC Priority', ''),
+            # 'Description': row.get('Description', ''),
+            # 'Resolved By': row.get('Resolved By', ''),
+            # 'Action': row.get('Action', 'N/A'),
+            # 'RCA': row.get('RCA', 'N/A'),
+            # 'Count': row.get('Count', 1)
+        # })
+
+    # if not results:
+        # ai_response = call_llm(query)
+        # return jsonify({
+            # 'ai_generated': True,
+            # 'disclaimer': "AI-generated response. May differ from actual resolution.",
+            # 'response': ai_response
+        # })
+
+    # return jsonify(results)
 
     
 def safe_get(value, default='N/A'):
