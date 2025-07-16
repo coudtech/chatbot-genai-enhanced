@@ -73,7 +73,7 @@ def index():
         # })
 
     # return jsonify(results)
- @app.route('/search', methods=['POST'])
+@app.route('/search', methods=['POST'])
 def search():
     global last_context_row
     query = request.json.get('query').lower()
