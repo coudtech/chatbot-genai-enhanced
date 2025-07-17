@@ -159,7 +159,7 @@ def search():
     results = []
     for i, (_, row) in enumerate(top_rows.iterrows(), start=1):
         last_context_row = row.to_dict()
-        formatted_date = row['Date'].strftime('%Y-%m-%d')
+        formatted_date = row['Date'].strftime('%dd-%mm-%yyyy')
         results.append({
             'Index': i,
             'TrueIndex': int(row['Index']),
