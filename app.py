@@ -10,7 +10,7 @@ from io import BytesIO
 import os, base64, tempfile, requests
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import re  
 
 app = Flask(__name__)
 
@@ -32,182 +32,95 @@ def call_llm(prompt, context=None):
 def index():
     return render_template('index.html')
 
+
+
 # @app.route('/search', methods=['POST'])
 # def search():
     # global last_context_row
-    # query = request.json.get('query')
-
-    #Vectorize query and calculate cosine similarity with TF-IDF matrix
-    # query_vec = model.vectorizer.transform([query])
-    # sim_scores = cosine_similarity(query_vec, model.tfidf_matrix).flatten()
-
-    #Get top 5 matches with similarity scores
-    # top_indices = sim_scores.argsort()[-5:][::-1]
-    # top_scores = sim_scores[top_indices]
-
-    # results = []
-    # for i, (idx, score) in enumerate(zip(top_indices, top_scores), start=1):
-        # if score < 0.2:
-            # continue  # Skip low similarity results
-        # row = model.df.loc[idx]
-        # last_context_row = row.to_dict()  # Save full row for follow-up context
-        # results.append({
-            # 'Index': i,
-            # 'TrueIndex': int(row['Index']),
-            # 'INC': row.get('INC', ''),
-            #'Date': row.get('Date', ''),
-            # 'Date': row['Date'].strftime('%Y-%m-%d'),
-            # 'Description': row.get('Description', ''),
-            # 'Resolved By': row.get('Resolved By', ''),
-            # 'Action': row.get('Action', 'N/A'),
-            # 'RCA': row.get('RCA', 'N/A'),          
-            # 'Count': row.get('Count', 1)
-        # })
-    #If no good matches, generate AI-based response placeholder
-    # if not results:
-        # ai_response = call_llm(query)
-        # return jsonify({
-            # 'ai_generated': True,
-            # 'disclaimer': "AI-generated response. May differ from actual resolution.",
-            # 'response': ai_response
-        # })
-
-    # return jsonify(results)
-@app.route('/search', methods=['POST'])
-def search():
-    global last_context_row
-    query = request.json.get('query').lower()
+    # query = request.json.get('query').lower()
 
     # --- Step 1: Intent Detection ---
-    def is_analysis_query(q):
-        keywords = ['total', 'count', 'how many', 'number of', 'yesterday', 'today', 'last week']
-        return any(k in q for k in keywords)
+    # def is_analysis_query(q):
+        # keywords = ['total', 'count', 'how many', 'number of', 'yesterday', 'today', 'last week']
+        # return any(k in q for k in keywords)
 
     # --- Step 2: Handle Analysis Queries ---
-    if is_analysis_query(query):
-        df = model.df.copy()
-        #df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-        df['Date'] = pd.to_datetime(df['Date'], errors='coerce').dt.normalize()
-        df = df.dropna(subset=['Date'])
+    # if is_analysis_query(query):
+        # df = model.df.copy()
+        # df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+        # df['Date'] = pd.to_datetime(df['Date'], errors='coerce').dt.normalize()
+        # df = df.dropna(subset=['Date'])
 
-        today = pd.Timestamp.today().normalize()
-        yesterday = today - pd.Timedelta(days=1)
+        # today = pd.Timestamp.today().normalize()
+        # yesterday = today - pd.Timedelta(days=1)
 
-        query = query.lower()  # Normalize the case for easier matching
+        # query = query.lower()  # Normalize the case for easier matching
 
         # YESTERDAY queries
-        if 'yesterday' in query and (
-            'count' in query or
-            'total' in query or
-            'issues' in query or
-            'resolved' in query or
-            'occurred' in query or
-            'number' in query
-        ):
-            count = df[df['Date'] == yesterday].shape[0]
-            return jsonify({
-                'analysis': True,
-                'query_type': 'count_yesterday',
-                'date': str(yesterday.date()),
-                'total_issues': count
-            })
+        # if 'yesterday' in query and (
+            # 'count' in query or
+            # 'total' in query or
+            # 'issues' in query or
+            # 'resolved' in query or
+            # 'occurred' in query or
+            # 'number' in query
+        # ):
+            # count = df[df['Date'] == yesterday].shape[0]
+            # return jsonify({
+                # 'analysis': True,
+                # 'query_type': 'count_yesterday',
+                # 'date': str(yesterday.date()),
+                # 'total_issues': count
+            # })
 
-        elif 'today' in query and (
-        'count' in query or
-        'total' in query or
-        'issues' in query or
-        'resolved' in query or
-        'occurred' in query or
-        'number' in query
-        ):
-            count = df[df['Date'] == today].shape[0]
-            return jsonify({
-                'analysis': True,
-                'query_type': 'count_today',
-                'date': str(today.date()),
-                'total_issues': count
-            })
+        # elif 'today' in query and (
+        # 'count' in query or
+        # 'total' in query or
+        # 'issues' in query or
+        # 'resolved' in query or
+        # 'occurred' in query or
+        # 'number' in query
+        # ):
+            # count = df[df['Date'] == today].shape[0]
+            # return jsonify({
+                # 'analysis': True,
+                # 'query_type': 'count_today',
+                # 'date': str(today.date()),
+                # 'total_issues': count
+            # })
 
-        elif (
-            'total' in query or
-            'count' in query or
-            'all' in query or
-            'overall' in query or
-            ('issues' in query and ('how many' in query or 'number' in query))
-        ):
-            total = df.shape[0]
-            return jsonify({
-                'analysis': True,
-                'query_type': 'total_issues',
-                'total_issues': total
-            })
+        # elif (
+            # 'total' in query or
+            # 'count' in query or
+            # 'all' in query or
+            # 'overall' in query or
+            # ('issues' in query and ('how many' in query or 'number' in query))
+        # ):
+            # total = df.shape[0]
+            # return jsonify({
+                # 'analysis': True,
+                # 'query_type': 'total_issues',
+                # 'total_issues': total
+            # })
 
 
     # --- Step 3: Proceed with Normal RCA Flow ---
-    query_vec = model.vectorizer.transform([query])
-    sim_scores = cosine_similarity(query_vec, model.tfidf_matrix).flatten()
-
-    top_indices = sim_scores.argsort()[-5:][::-1]
-    top_scores = sim_scores[top_indices]
-
-    top_rows = model.df.iloc[top_indices].copy()
-    top_rows['similarity'] = top_scores
-    top_rows['Date'] = pd.to_datetime(top_rows['Date'], errors='coerce')
-    top_rows = top_rows.dropna(subset=['Date'])
-    top_rows = top_rows.sort_values(by='Date', ascending=True)
-
-    results = []
-    for i, (_, row) in enumerate(top_rows.iterrows(), start=1):
-        last_context_row = row.to_dict()
-        formatted_date = row['Date'].strftime('%d-%m-%y')
-        results.append({
-            'Index': i,
-            'TrueIndex': int(row['Index']),
-            'Date': formatted_date,
-            'INC': row.get('INC', ''),
-            'INC Priority': row.get('INC Priority', ''),
-            'Description': row.get('Description', ''),
-            'Resolved By': row.get('Resolved By', ''),
-            'Action': row.get('Action', 'N/A'),
-            'RCA': row.get('RCA', 'N/A'),
-            'Count': row.get('Count', 1)
-        })
-
-    if not results:
-        ai_response = call_llm(query)
-        return jsonify({
-            'ai_generated': True,
-            'disclaimer': "AI-generated response. May differ from actual resolution.",
-            'response': ai_response
-        })
-
-    return jsonify(results)
-   
-# @app.route('/search', methods=['POST'])
-# def search():
-    # global last_context_row
-    # query = request.json.get('query')
-
     # query_vec = model.vectorizer.transform([query])
     # sim_scores = cosine_similarity(query_vec, model.tfidf_matrix).flatten()
 
     # top_indices = sim_scores.argsort()[-5:][::-1]
     # top_scores = sim_scores[top_indices]
 
-    #Extract top rows into DataFrame for sorting
     # top_rows = model.df.iloc[top_indices].copy()
     # top_rows['similarity'] = top_scores
-
-    # Parse Date and clean
     # top_rows['Date'] = pd.to_datetime(top_rows['Date'], errors='coerce')
-    # top_rows = top_rows.dropna(subset=['Date'])  # optional
+    # top_rows = top_rows.dropna(subset=['Date'])
     # top_rows = top_rows.sort_values(by='Date', ascending=True)
 
     # results = []
     # for i, (_, row) in enumerate(top_rows.iterrows(), start=1):
         # last_context_row = row.to_dict()
-        # formatted_date = row['Date'].strftime('%d-%m-%Y')
-
+        # formatted_date = row['Date'].strftime('%d-%m-%y')
         # results.append({
             # 'Index': i,
             # 'TrueIndex': int(row['Index']),
@@ -230,8 +143,169 @@ def search():
         # })
 
     # return jsonify(results)
-
     
+    
+def safe_format_date(date_obj, fmt='%d-%m-%y'):
+    try:
+        return pd.to_datetime(date_obj, errors='coerce').strftime(fmt)
+    except:
+        return 'Unknown'
+
+
+from flask import request, jsonify
+import pandas as pd
+import re
+from sklearn.metrics.pairwise import cosine_similarity
+
+last_context_row = None  # Global variable to store last matched row
+
+@app.route('/search', methods=['POST'])
+def search():
+    global last_context_row
+    query = request.json.get('query', '').lower()
+    df = model.df.copy()
+
+    # --- Step 1: Intent Detection ---
+    def is_analysis_query(q):
+        keywords = ['total', 'count', 'how many', 'number of', 'yesterday', 'today', 'last week']
+        return any(k in q for k in keywords)
+    def extract_specific_date(query, exclude_dates=[]):
+        try:
+            parsed = parser.parse(query, fuzzy=True).date()
+            normalized = pd.Timestamp(parsed).normalize()
+            if normalized not in exclude_dates:
+                return normalized
+        except:
+            return None
+
+    # --- Step 2: Handle Analysis Queries ---
+    if is_analysis_query(query):
+        df['Date'] = pd.to_datetime(df['Date'], errors='coerce').dt.normalize()
+        df = df.dropna(subset=['Date'])
+
+        today = pd.Timestamp.today().normalize()
+        yesterday = today - pd.Timedelta(days=1)
+        # specific_date = extract_specific_date(query, exclude_dates=[today, yesterday])
+
+
+        if 'yesterday' in query:
+            count = df[df['Date'] == yesterday].shape[0]
+            return jsonify({'analysis': True, 'query_type': 'count_yesterday', 'date': str(yesterday.date()), 'total_issues': count})
+
+        elif 'today' in query:
+            count = df[df['Date'] == today].shape[0]
+            return jsonify({'analysis': True, 'query_type': 'count_today', 'date': str(today.date()), 'total_issues': count})
+         # ✅ Specific date (e.g. "How many issues on July 15?")
+        
+        # elif specific_date is not None:
+            # count = df[df['Date'] == specific_date].shape[0]
+            # return jsonify({
+                # 'analysis': True,
+                # 'query_type': 'count_by_specific_date',
+                # 'date': str(specific_date.date()),
+                # 'total_issues': count
+            # })
+
+        elif any(k in query for k in ['total', 'count', 'all', 'overall']) or ('issues' in query and ('how many' in query or 'number' in query)):
+            total = df.shape[0]
+            return jsonify({'analysis': True, 'query_type': 'total_issues', 'total_issues': total})
+
+    # --- Step 3: Handle Incident-Specific Queries ---
+    incident_match = re.search(r'inc\d{5,}', query)
+    if incident_match:
+        incident_id = incident_match.group(0).upper()
+        incident_row = df[df['INC'].str.upper() == incident_id]
+
+        if not incident_row.empty:
+            row = incident_row.iloc[0]
+            last_context_row = row.to_dict()
+            return jsonify({
+                'incident_match': True,
+                'INC': row.get('INC', ''),
+                # 'Date': row['Date'].strftime('%d-%m-%y'),
+                'Date': safe_format_date(row['Date']),
+                'INC Priority': row.get('INC Priority', ''),
+                'Market': row.get('Market', ''),
+                'Description': row.get('Description', ''),
+                'Resolved By': row.get('Resolved By', ''),
+                'Action': row.get('Action', 'N/A'),
+                'RCA': row.get('RCA', 'N/A'),
+                'Count': row.get('Count', 1)
+            })
+    
+
+    # --- Step 4: Semantic RCA Flow (TF-IDF search) ---
+    query_vec = model.vectorizer.transform([query])
+    sim_scores = cosine_similarity(query_vec, model.tfidf_matrix).flatten()
+    top_indices = sim_scores.argsort()[-5:][::-1]
+    top_scores = sim_scores[top_indices]
+
+    top_rows = df.iloc[top_indices].copy()
+    top_rows['similarity'] = top_scores
+    top_rows['Date'] = pd.to_datetime(top_rows['Date'], errors='coerce')
+    top_rows = top_rows.dropna(subset=['Date'])
+    top_rows = top_rows.sort_values(by='Date', ascending=True)
+
+    results = []
+    for i, (_, row) in enumerate(top_rows.iterrows(), start=1):
+        last_context_row = row.to_dict()
+        # formatted_date = row['Date'].strftime('%d-%m-%y')
+        formatted_date = safe_format_date(row['Date'])
+        results.append({
+            'Index': i,
+            'TrueIndex': int(row['Index']),
+            'Date': formatted_date,
+            'INC': row.get('INC', ''),
+            'INC Priority': row.get('INC Priority', ''),
+            'Market': row.get('Market', ''),
+            'Description': row.get('Description', ''),
+            'Resolved By': row.get('Resolved By', ''),
+            'Action': row.get('Action', 'N/A'),
+            'RCA': row.get('RCA', 'N/A'),
+            'Count': row.get('Count', 1)
+        })
+
+    if results:
+        return jsonify(results)
+
+    # --- Step 5: Fallback to Follow-Up Questions Using Last Context Row ---
+    if last_context_row:
+        # formatted_date = pd.to_datetime(last_context_row.get('Date', ''), errors='coerce')
+        formatted_date = safe_format_date(last_context_row.get('Date', ''), '%d-%m-%Y')
+        # formatted_date = formatted_date.strftime('%d-%m-%Y') if not pd.isna(formatted_date) else 'Unknown'
+        
+
+        if 'rca' in query:
+            return jsonify({'response': f"The RCA is: {last_context_row.get('RCA', 'Not available')}."})
+        elif 'resolved by' in query or 'who fixed' in query:
+            return jsonify({'response': f"This was resolved by: {last_context_row.get('Resolved By', 'Not available')}."})
+        elif 'action' in query:
+            return jsonify({'response': f"The action taken was: {last_context_row.get('Action', 'Not available')}."})
+        elif 'date' in query:
+            return jsonify({'response': f"The incident occurred on: {formatted_date}."})
+        elif 'description' in query:
+            return jsonify({'response': f"The description is: {last_context_row.get('Description', 'Not available')}."})
+        else:
+            return jsonify({
+                'response': (
+                    f"Here are the details I found: "
+                    f"Date: {formatted_date}, Description: {last_context_row.get('Description', 'N/A')}, "
+                    f"Resolved By: {last_context_row.get('Resolved By', 'N/A')}, "
+                    f"Action: {last_context_row.get('Action', 'N/A')}, RCA: {last_context_row.get('RCA', 'N/A')}."
+                )
+            })
+
+    # --- Step 6: Fallback to AI if No Match ---
+    ai_response = call_llm(query)
+    return jsonify({
+        'ai_generated': True,
+        'disclaimer': "AI-generated response. May differ from actual resolution.",
+        'response': ai_response
+    })
+
+
+
+
 def safe_get(value, default='N/A'):
     # Convert NaN or non-serializable types to safe values
     if value is None:
@@ -239,6 +313,8 @@ def safe_get(value, default='N/A'):
     if isinstance(value, float) and math.isnan(value):
         return default
     return str(value)  # Convert numpy types or others to string
+
+
 
 @app.route('/get_rca', methods=['POST'])
 def get_rca():

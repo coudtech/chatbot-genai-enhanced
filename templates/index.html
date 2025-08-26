@@ -4,10 +4,16 @@
     <title>Local Chatbot</title>
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/jpg" href="{{ url_for('static', filename='logo.jpg') }}">
-    <title>cahtbot-genai</title>
+	<link rel="icon" type="image/jpg" href="{{ url_for('static', filename='logo.jpg') }}">
+	<title>cahtbot-genai</title>
 </head>
 <body>
+<div class="watermark-banner">
+    <div class="scrolling-text">
+        Incident data is available till 20th July 2025
+    </div>
+</div>
+
 
 <div class="dropdown">
     <button class="dropbtn">☰Menu</button>
@@ -17,6 +23,7 @@
 </div>
 
 <h2>GenAI Ticket Assistant</h2>
+
 
 <div id="bot-typing" style="display: none;">Bot is typing...</div>
 <div id="chat-box"></div>
@@ -150,103 +157,149 @@
             type();
         }
     }
+	
+	
+	
+	
+	
+	async function sendMessage() {
+	const inputField = document.getElementById("user-input");
+	const input = inputField.value.trim();
+	if (!input) return;
 
-    async function sendMessage() {
-        const inputField = document.getElementById("user-input");
-        const input = inputField.value.trim();
-        if (!input) return;
+	appendMessage(input, 'user');
+	inputField.value = '';
+	document.getElementById("bot-typing").style.display = 'block';
 
-        appendMessage(input, 'user');
-        inputField.value = '';
-        document.getElementById("bot-typing").style.display = 'block';
+	setTimeout(async () => {
+		document.getElementById("bot-typing").style.display = 'none';
+		const lowerInput = input.toLowerCase();
 
-        setTimeout(async () => {
-            document.getElementById("bot-typing").style.display = 'none';
-            const lowerInput = input.toLowerCase();
+		if (lowerInput === 'hi' || lowerInput === 'hello') {
+			appendMessage("Hi, how may I assist you?");
+			context.stage = 'search';
+			context.noCount = 0;
+			context.currentIncident = null;
+			return;
+		}
 
-            if (lowerInput === 'hi' || lowerInput === 'hello') {
-                appendMessage("Hi, how may I assist you?");
-                context.stage = 'search';
-                context.noCount = 0;
-                context.currentIncident = null;
-                return;
-            }
+		try {
+			switch (context.stage) {
+				case 'init':
+					appendMessage("Please say hi or hello to start.");
+					break;
 
-            try {
-                switch(context.stage) {
-                    case 'init':
-                        appendMessage("Please say hi or hello to start.");
-                        break;
-                   
+				case 'search':
+					const response = await fetch('/search', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ query: input })
+					});
 
-                    case 'search':
-                        const response = await fetch('/search', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ query: input })
-                        });
+					if (!response.ok) throw new Error(`Network response was not ok: ${response.status}`);
 
-                        if (!response.ok) throw new Error(`Network response was not ok: ${response.status}`);
+					const results = await response.json();
+					console.log("Results:", results);
 
-                        const results = await response.json();
-						console.log("Results:", results);
-
-						// Check if results is an array (search results) or object (analysis summary)
-						if (Array.isArray(results)) {
-							if (results.length === 0) {
-								appendMessage({
-									text: "Sorry, I can't help with your query.",
-									html: "<br>To start a new conversation, please say hi/hello. Thank you."
-								});
-								context.stage = 'init';
-								return;
-							}
-
-							context.searchResults = results;
-
-							let table = "<table><tr><th>No</th><th>Date</th><th>INC</th><th>INC Priority</th><th>Description</th></tr>";
-							for (const row of results) {
-								table += `<tr><td>${row.Index}</td><td class="nowrap">${row.Date}</td><td>${row.INC}</td><td>${row["INC Priority"]}</td><td>${row.Description}</td></tr>`;
-							}
-							table += "</table>";
-							appendMessage({ text: getRandomTemplate(introTemplates), html: table });
-
-							setTimeout(() => {
-								appendMessage("Is it matching with your issue? (yes/no)");
-								context.stage = 'confirm';
-							}, results.length * 50 + 3500);
-
-						} else if (results.analysis) {
-							// Handle analysis JSON response
-							let message = "";
-
-							switch(results.query_type) {
-								case 'count_today':
-									message = `Issues reported today (${results.date}): ${results.total_issues}`;
-									break;
-								case 'count_yesterday':
-									message = `Issues reported yesterday (${results.date}): ${results.total_issues}`;
-									break;
-								case 'total_issues':
-									message = `Total issues: ${results.total_issues}`;
-									break;
-								default:
-									message = "Sorry, couldn't understand the analysis result.";
-							}
-
-							appendMessage(message);
-							<!-- context.stage = 'init';  // or wherever you want the flow to continue -->
-
-						} else {
-							// Unexpected response format
+					if (Array.isArray(results)) {
+						if (results.length === 0) {
 							appendMessage({
 								text: "Sorry, I can't help with your query.",
 								html: "<br>To start a new conversation, please say hi/hello. Thank you."
 							});
 							context.stage = 'init';
+							return;
 						}
 
-						break;
+						context.searchResults = results;
+
+						let table = "<table><tr><th>No</th><th>Date</th><th>INC</th><th>INC Priority</th><th>Market</th><th>Description</th></tr>";
+						for (const row of results) {
+							table += `<tr><td>${row.Index}</td><td class="nowrap">${row.Date}</td><td>${row.INC}</td><td>${row["INC Priority"]}<td>${row.Market}</td></td><td>${row.Description}</td></tr>`;
+						}
+						table += "</table>";
+
+						appendMessage({ text: getRandomTemplate(introTemplates), html: table });
+
+						setTimeout(() => {
+							appendMessage("Is it matching with your issue? (yes/no)");
+							context.stage = 'confirm';
+						}, results.length * 50 + 3500);
+
+					} else if (results.analysis) {
+						let message = "";
+						switch (results.query_type) {
+							case 'count_today':
+								message = `Issues reported today (${results.date}): ${results.total_issues}`;
+								break;
+							case 'count_yesterday':
+								message = `Issues reported yesterday (${results.date}): ${results.total_issues}`;
+								break;
+							case 'total_issues':
+								message = `Total issues: ${results.total_issues}`;
+								break;
+							case 'count_by_specific_date':
+								message = `Issues reported on ${results.date}: ${results.total_issues}`;
+								break;
+							default:
+								message = "Sorry, couldn't understand the analysis result.";
+						}
+						appendMessage(message);
+						
+					} else if (results.incident_match) {
+						context.currentIncident = results.INC;
+						context.currentIncidentDetails = results; // 💾 Save full details
+
+						const table = `
+							<table>
+								<tr><td><b>INC</b></td><td>${results.INC}</td></tr>
+								<tr><td><b>Date</b></td><td>${results.Date}</td></tr>
+								<tr><td><b>Priority</b></td><td>${results["INC Priority"]}</td></tr>
+							    <tr><td><b>Market</b></td><td>${results.Market}</td></tr>
+								<tr><td><b>Description</b></td><td>${results.Description}</td></tr>
+								<tr><td><b>Resolved By</b></td><td>${results["Resolved By"]}</td></tr>
+								<tr><td><b>Action</b></td><td>${results.Action}</td></tr>
+								<tr><td><b>RCA</b></td><td>${results.RCA}</td></tr>
+							</table>
+						`;
+
+						appendMessage({ text: `Here are the details for ${results.INC}:`, html: table });
+						context.stage = 'search'; // ✅ Set stage to followup
+					
+
+
+					<!-- } else if (results.incident_match) { -->
+						<!-- const table = ` -->
+							<!-- <table> -->
+								<!-- <tr><td><b>INC</b></td><td>${results.INC}</td></tr> -->
+								<!-- <tr><td><b>Date</b></td><td>${results.Date}</td></tr> -->
+								<!-- <tr><td><b>Priority</b></td><td>${results["INC Priority"]}</td></tr> -->
+								<!-- <tr><td><b>Description</b></td><td>${results.Description}</td></tr> -->
+								<!-- <tr><td><b>Resolved By</b></td><td>${results["Resolved By"]}</td></tr> -->
+								<!-- <tr><td><b>Action</b></td><td>${results.Action}</td></tr> -->
+								<!-- <tr><td><b>RCA</b></td><td>${results.RCA}</td></tr> -->
+							<!-- </table> -->
+						<!-- `; -->
+						<!-- appendMessage({ text: `Here are the details for ${results.INC}:`, html: table }); -->
+						<!-- context.stage = 'search'; -->
+						<!-- context.currentIncident = results.INC; -->
+
+					} else {
+						// Unexpected object response
+						appendMessage({
+							text: "Sorry, I can't help with your query.",
+							html: "<br>To start a new conversation, please say hi/hello. Thank you."
+						});
+						context.stage = 'init';
+					}
+					break;
+
+
+
+	
+	
+	
+
 
 
                     case 'confirm':
